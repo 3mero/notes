@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تطبيق الملاحظات المتقدم</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: #1a202c;
+            color: #e2e8f0;
+        }
+        .ql-editor {
+            min-height: 200px;
+        }
+        .ql-toolbar, .ql-container {
+            background-color: #2d3748 !important;
+            border-color: #4a5568 !important;
+        }
+        .ql-toolbar .ql-stroke {
+            stroke: #e2e8f0 !important;
+        }
+        .ql-toolbar .ql-fill {
+            fill: #e2e8f0 !important;
+        }
+        .ql-toolbar .ql-picker {
+            color: #e2e8f0 !important;
+        }
+        .ql-toolbar .ql-picker-options {
+            background-color: #2d3748 !important;
+        }
+        .ql-toolbar .ql-picker-item {
+            color: #e2e8f0 !important;
+        }
+        .custom-select {
+            background-color: #2d3748;
+            color: #e2e8f0;
+            font-size: 1.1rem;
+            padding: 0.5rem 1rem;
+        }
+        .header-button {
+            font-size: 1.1rem;
+            padding: 0.5rem 1rem;
+        }
+        .live-button {
+            width: 40px;
+            height: 5px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .live-button.active {
+            background-color: #e53e3e;
+        }
+        .live-note {
+            border: 2px solid #e53e3e;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-center mb-4">تطبيق الملاحظات المتقدم</h1>
+            <div class="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0 mb-4">
+                <div class="flex space-x-4 rtl:space-x-reverse w-full md:w-auto">
+                    <button id="addNoteBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded header-button">
+                        <i class="fas fa-plus mr-2"></i>إضافة ملاحظة
+                    </button>
+                    <div class="relative flex-grow md:flex-grow-0 flex items-center">
+                        <input type="text" id="searchInput" placeholder="بحث في الملاحظات..." class="w-full bg-gray-700 text-white py-2 px-4 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg">
+                        <div id="liveButton" class="live-button bg-gray-700 rounded-r">
+                            <i class="fas fa-broadcast-tower"></i>
+                        </div>
+                        <div id="editLiveUrlBtn" class="ml-2 cursor-pointer text-blue-500">
+                            <i class="fas fa-pen"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex space-x-4 rtl:space-x-reverse">
+                    <button id="exportNotesBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded header-button">
+                        <i class="fas fa-file-export mr-2"></i>تصدير
+                    </button>
+                    <button id="importNotesBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded header-button">
+                        <i class="fas fa-file-import mr-2"></i>استيراد
+                    </button>
+                </div>
+            </div>
+            <div class="flex justify-center space-x-4 rtl:space-x-reverse mt-4">
+                <select id="categoryFilter" class="custom-select rounded">
+                    <option value="">جميع الفئات</option>
+                    <option value="personal">شخصي</option>
+                    <option value="religious">ديني</option>
+                    <option value="work">عمل</option>
+                    <option value="other">أخرى</option>
+                </select>
+                <select id="sortFilter" class="custom-select rounded">
+                    <option value="newest">الأحدث</option>
+                    <option value="oldest">الأقدم</option>
+                    <option value="alphabetical">أبجدي</option>
+                </select>
+            </div>
+        </header>
+        
+        <main id="notesContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- الملاحظات ستضاف هنا ديناميكيًا -->
+        </main>
+    </div>
+
+    <!-- نموذج إضافة/تعديل الملاحظة -->
+    <div id="noteModal" class="fixed inset-0 bg-gray-800 bg-opacity-75 hidden items-center justify-center">
+        <div class="bg-gray-700 p-8 rounded-lg w-full max-w-2xl">
+            <h2 id="modalTitle" class="text-2xl font-bold mb-4 text-white">إضافة ملاحظة جديدة</h2>
+            <input id="noteTitle" type="text" placeholder="عنوان الملاحظة" class="w-full p-2 mb-4 bg-gray-600 text-white rounded">
+            <div id="editor" class="mb-4 bg-gray-600 text-white"></div>
+            <input id="noteLink" type="url" placeholder="رابط (اختياري)" class="w-full p-2 mb-4 bg-gray-600 text-white rounded">
+            <div class="flex justify-between mb-4">
+                <div>
+                    <label for="noteColor" class="mr-2 text-white">لون الخلفية:</label>
+                    <input id="noteColor" type="color" value="#4A5568" class="h-10 w-20 cursor-pointer">
+                </div>
+                <div>
+                    <label for="noteCategory" class="mr-2 text-white">الفئة:</label>
+                    <select id="noteCategory" class="custom-select rounded">
+                        <option value="personal">شخصي</option>
+                        <option value="religious">ديني</option>
+                        <option value="work">عمل</option>
+                        <option value="other">أخرى</option>
+                    </select>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 rtl:space-x-reverse">
+                <button id="saveNoteBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">حفظ</button>
+                <button id="cancelNoteBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let notes = JSON.parse(localStorage.getItem('notes')) || [];
+        const notesContainer = document.getElementById('notesContainer');
+        const noteModal = document.getElementById('noteModal');
+        const addNoteBtn = document.getElementById('addNoteBtn');
+        const exportNotesBtn = document.getElementById('exportNotesBtn');
+        const importNotesBtn = document.getElementById('importNotesBtn');
+        const modalTitle = document.getElementById('modalTitle');
+        const noteTitle = document.getElementById('noteTitle');
+        const noteLink = document.getElementById('noteLink');
+        const noteColor = document.getElementById('noteColor');
+        const noteCategory = document.getElementById('noteCategory');
+        const saveNoteBtn = document.getElementById('saveNoteBtn');
+        const cancelNoteBtn = document.getElementById('cancelNoteBtn');
+        const searchInput = document.getElementById('searchInput');
+        const categoryFilter = document.getElementById('categoryFilter');
+        const sortFilter = document.getElementById('sortFilter');
+        const liveButton = document.getElementById('liveButton');
+        const editLiveUrlBtn = document.getElementById('editLiveUrlBtn');
+
+        let editingNoteId = null;
+        let quill;
+        let isLive = false;
+        let liveInterval;
+        let liveUrl = '';
+
+        // Initialize Quill
+        document.addEventListener('DOMContentLoaded', function() {
+            quill = new Quill('#editor', {
+                theme: 'snow',
+                placeholder: 'اكتب ملاحظتك هنا...',
+                modules: {
+                    toolbar: [
+                        ['bold', 'italic', 'underline', 'strike'],
+                        ['blockquote', 'code-block'],
+                        [{ 'header': 1 }, { 'header': 2 }],
+                        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                        [{ 'script': 'sub'}, { 'script': 'super' }],
+                        [{ 'indent': '-1'}, { 'indent': '+1' }],
+                        [{ 'direction': 'rtl' }],
+                        [{ 'size': ['small', false, 'large', 'huge'] }],
+                        [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+                        [{ 'color': [] }, { 'background': [] }],
+                        [{ 'font': [] }],
+                        [{ 'align': [] }],
+                        ['clean']
+                    ]
+                }
+            });
+        });
+
+        function renderNotes(notesToRender = notes) {
+            notesContainer.innerHTML = '';
+            notesToRender.forEach((note, index) => {
+                const noteElement = document.createElement('div');
+                noteElement.className = `bg-gray-800 rounded-lg shadow-lg overflow-hidden ${note.isLive ? 'live-note' : ''}`;
+                noteElement.style.backgroundColor = note.color || '#4A5568';
+                noteElement.innerHTML = `
+                    <div class="p-6" style="color: ${getContrastColor(note.color)};">
+                        ${note.isLive ? '<span class="text-red-500 font-bold">مباشر</span>' : ''}
+                        <h3 class="text-2xl font-bold mb-3">${note.title}</h3>
+                        <div class="mb-4 max-h-48 overflow-y-auto">${note.content}</div>
+                        ${note.link ? `<a href="${note.link}" target="_blank" class="text-blue-400 hover:text-blue-300 block mb-2">رابط مرفق</a>` : ''}
+                        <p class="text-sm mt-2">
+                            الفئة: ${getCategoryName(note.category)} | تاريخ الإنشاء: ${new Date(note.createdAt).toLocaleString('ar-LY')}
+                        </p>
+                    </div>
+                    <div class="bg-gray-700 px-6 py-3 flex justify-between">
+                        <button onclick="editNote(${index})" class="text-blue-500 hover:text-blue-600"><i class="fas fa-edit"></i> تعديل</button>
+                        <button onclick="deleteNote(${index})" class="text-red-500 hover:text-red-600"><i class="fas fa-trash"></i> حذف</button>
+                        <button onclick="shareNote(${index})" class="text-green-500 hover:text-green-600"><i class="fas fa-share"></i> مشاركة</button>
+                    </div>
+                `;
+                notesContainer.appendChild(noteElement);
+            });
+        }
+
+        function getContrastColor(bgColor) {
+            const r = parseInt(bgColor.slice(1, 3), 16);
+            const g = parseInt(bgColor.slice(3, 5), 16);
+            const b = parseInt(bgColor.slice(5, 7), 16);
+            const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+            return (yiq >= 128) ? 'black' : 'white';
+        }
+
+        function getCategoryName(category) {
+            switch(category) {
+                case 'personal': return 'شخصي';
+                case 'religious': return 'ديني';
+                case 'work': return 'عمل';
+                case 'other': return 'أخرى';
+                default: return 'غير محدد';
+            }
+        }
+
+        function showModal(isEditing = false) {
+            modalTitle.textContent = isEditing ? 'تعديل الملاحظة' : 'إضافة ملاحظة جديدة';
+            noteModal.style.display = 'flex';
+        }
+
+        function hideModal() {
+            noteModal.style.display = 'none';
+            noteTitle.value = '';
+            quill.setContents([]);
+            noteLink.value = '';
+            noteColor.value = '#4A5568';
+            noteCategory.value = 'personal';
+            editingNoteId = null;
+        }
+
+        function saveNote() {
+            const title = noteTitle.value.trim();
+            const content = quill.root.innerHTML;
+            const link = noteLink.value.trim();
+            const color = noteColor.value;
+            const category = noteCategory.value;
+
+            if (!title || !content) {
+                alert('الرجاء إدخال العنوان والمحتوى');
+                return;
+            }
+
+            const newNote = {
+                id: editingNoteId !== null ? notes[editingNoteId].id : Date.now(),
+                title,
+                content,
+                link,
+                color,
+                category,
+                createdAt: editingNoteId !== null ? notes[editingNoteId].createdAt : new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            if (editingNoteId !== null) {
+                notes[editingNoteId] = newNote;
+            } else {
+                notes.unshift(newNote);
+            }
+
+            localStorage.setItem('notes', JSON.stringify(notes));
+            renderNotes();
+            hideModal();
+        }
+
+        function editNote(index) {
+            const note = notes[index];
+            noteTitle.value = note.title;
+            quill.root.innerHTML = note.content;
+            noteLink.value = note.link || '';
+            noteColor.value = note.color || '#4A5568';
+            noteCategory.value = note.category || 'personal';
+            editingNoteId = index;
+            showModal(true);
+        }
+
+        function deleteNote(index) {
+            if (confirm('هل أنت متأكد من حذف هذه الملاحظة؟')) {
+                notes.splice(index, 1);
+                localStorage.setItem('notes', JSON.stringify(notes));
+                renderNotes();
+            }
+        }
+
+        function shareNote(index) {
+            const note = notes[index];
+            const text = `${note.title}\n\n${note.content.replace(/<[^>]*>?/gm, '')}\n\nالرابط: ${note.link || 'لا يوجد رابط'}`;
+            if (navigator.share) {
+                navigator.share({
+                    title: note.title,
+                    text: text,
+                    url: note.link
+                }).catch(console.error);
+            } else {
+                const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+                window.open(whatsappUrl, '_blank');
+            }
+        }
+
+        function exportNotes() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(notes));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "notes.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+
+        function importNotes() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+            input.onchange = function(event) {
+                const file = event.target.files[0];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const importedNotes = JSON.parse(e.target.result);
+                        notes = importedNotes;
+                        localStorage.setItem('notes', JSON.stringify(notes));
+                        renderNotes();
+                        alert('تم استيراد الملاحظات بنجاح');
+                    } catch (error) {
+                        alert('حدث خطأ أثناء استيراد الملاحظات');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function searchNotes() {
+            const searchTerm = searchInput.value.toLowerCase();
+            if (searchTerm === '') {
+                renderNotes();
+            } else {
+                const filteredNotes = notes.filter(note => 
+                    note.title.toLowerCase().includes(searchTerm) || 
+                    note.content.toLowerCase().includes(searchTerm)
+                );
+                renderNotes(filteredNotes);
+            }
+        }
+
+        function filterAndSortNotes() {
+            let filteredNotes = [...notes];
+            
+            if (categoryFilter.value) {
+                filteredNotes = filteredNotes.filter(note => note.category === categoryFilter.value);
+            }
+
+            switch (sortFilter.value) {
+                case 'newest':
+                    filteredNotes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                    break;
+                case 'oldest':
+                    filteredNotes.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                    break;
+                case 'alphabetical':
+                    filteredNotes.sort((a, b) => a.title.localeCompare(b.title, 'ar'));
+                    break;
+            }
+
+            renderNotes(filteredNotes);
+        }
+
+        function toggleLive() {
+            isLive = !isLive;
+            liveButton.classList.toggle('active', isLive);
+            if (isLive) {
+                startLiveUpdates();
+            } else {
+                stopLiveUpdates();
+            }
+        }
+
+        function startLiveUpdates() {
+            fetchLiveNotes();
+            liveInterval = setInterval(fetchLiveNotes, 5000);
+        }
+
+        function stopLiveUpdates() {
+            clearInterval(liveInterval);
+        }
+
+    async function fetchLiveNotes() {
+        try {
+            const response = await fetch(liveUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            let responseText = await response.text();
+            console.log("النص الأصلي المستلم:", responseText); 
+
+   
+            responseText = responseText.trim();
+            if (responseText.startsWith(")]}'\n")) {
+                responseText = responseText.substr(5);
+            }
+            console.log("النص بعد التنظيف:", responseText);
+
+            let liveNotes;
+            try {
+                liveNotes = JSON.parse(responseText);
+            } catch (jsonError) {
+                console.error("خطأ في تحليل JSON:", jsonError);
+                throw new Error("فشل في تحليل البيانات كـ JSON");
+            }
+
+            if (!Array.isArray(liveNotes)) {
+                if (typeof liveNotes === 'object' && liveNotes !== null) {
+                    liveNotes = [liveNotes]; 
+                } else {
+                    console.error("البيانات المستلمة:", liveNotes);
+                    throw new Error("البيانات المستلمة ليست بالتنسيق المتوقع");
+                }
+            }
+
+            let hasNewNotes = false;
+            liveNotes.forEach(liveNote => {
+                if (!liveNote.id) {
+                    liveNote.id = Date.now();
+                }
+                if (!liveNote.title || !liveNote.content) {
+                    console.warn("تم تجاهل ملاحظة غير صالحة:", liveNote);
+                    return;
+                }
+                const existingNoteIndex = notes.findIndex(note => note.id === liveNote.id);
+                if (existingNoteIndex === -1) {
+                    notes.unshift({
+                        ...liveNote,
+                        isLive: true,
+                        createdAt: liveNote.createdAt || new Date().toISOString(),
+                        updatedAt: liveNote.updatedAt || new Date().toISOString()
+                    });
+                    hasNewNotes = true;
+                }
+            });
+
+            if (hasNewNotes) {
+                localStorage.setItem('notes', JSON.stringify(notes));
+                renderNotes();
+                console.log("تم إضافة ملاحظات جديدة");
+            } else {
+                console.log("لم يتم العثور على ملاحظات جديدة");
+            }
+        } catch (error) {
+            console.error('Error fetching live notes:', error);
+            alert(`حدث خطأ أثناء جلب الملاحظات المباشرة: ${error.message}\nيرجى التحقق من الرابط والاتصال بالإنترنت والمحاولة مرة أخرى.`);
+            stopLiveUpdates();
+            isLive = false;
+            liveButton.classList.remove('active');
+        }
+    }
+
+        function editLiveUrl() {
+            const newUrl = prompt('أدخل الرابط الجديد للبث المباشر:', liveUrl);
+            if (newUrl && newUrl !== liveUrl) {
+                liveUrl = newUrl;
+                alert('تم تحديث رابط البث المباشر بنجاح');
+                if (isLive) {
+                    stopLiveUpdates();
+                    startLiveUpdates();
+                }
+            }
+        }
+
+
+        addNoteBtn.addEventListener('click', () => showModal());
+        saveNoteBtn.addEventListener('click', saveNote);
+        cancelNoteBtn.addEventListener('click', hideModal);
+        exportNotesBtn.addEventListener('click', exportNotes);
+        importNotesBtn.addEventListener('click', importNotes);
+        searchInput.addEventListener('input', searchNotes);
+        categoryFilter.addEventListener('change', filterAndSortNotes);
+        sortFilter.addEventListener('change', filterAndSortNotes);
+        liveButton.addEventListener('click', toggleLive);
+        editLiveUrlBtn.addEventListener('click', editLiveUrl);
+
+       
+        renderNotes();
+    </script>
+</body>
+</html>
