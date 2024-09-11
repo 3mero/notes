@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تطبيق الملاحظات المتقدم</title>
+    <title> الملاحظات </title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
@@ -47,22 +47,6 @@
             font-size: 1.1rem;
             padding: 0.5rem 1rem;
         }
-        .live-button {
-            width: 40px;
-            height: 5px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        .live-button.active {
-            background-color: #e53e3e;
-        }
-        .live-note {
-            border: 2px solid #e53e3e;
-        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -74,14 +58,8 @@
                     <button id="addNoteBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded header-button">
                         <i class="fas fa-plus mr-2"></i>إضافة ملاحظة
                     </button>
-                    <div class="relative flex-grow md:flex-grow-0 flex items-center">
-                        <input type="text" id="searchInput" placeholder="بحث في الملاحظات..." class="w-full bg-gray-700 text-white py-2 px-4 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg">
-                        <div id="liveButton" class="live-button bg-gray-700 rounded-r">
-                            <i class="fas fa-broadcast-tower"></i>
-                        </div>
-                        <div id="editLiveUrlBtn" class="ml-2 cursor-pointer text-blue-500">
-                            <i class="fas fa-pen"></i>
-                        </div>
+                    <div class="relative flex-grow md:flex-grow-0">
+                        <input type="text" id="searchInput" placeholder="بحث في الملاحظات..." class="w-full bg-gray-700 text-white py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg">
                     </div>
                 </div>
                 <div class="flex space-x-4 rtl:space-x-reverse">
@@ -160,16 +138,11 @@
         const searchInput = document.getElementById('searchInput');
         const categoryFilter = document.getElementById('categoryFilter');
         const sortFilter = document.getElementById('sortFilter');
-        const liveButton = document.getElementById('liveButton');
-        const editLiveUrlBtn = document.getElementById('editLiveUrlBtn');
 
         let editingNoteId = null;
         let quill;
-        let isLive = false;
-        let liveInterval;
-        let liveUrl = 'https://3mero.github.io/notes/live/live.json';
 
-        // Initialize Quill
+      
         document.addEventListener('DOMContentLoaded', function() {
             quill = new Quill('#editor', {
                 theme: 'snow',
@@ -198,11 +171,10 @@
             notesContainer.innerHTML = '';
             notesToRender.forEach((note, index) => {
                 const noteElement = document.createElement('div');
-                noteElement.className = `bg-gray-800 rounded-lg shadow-lg overflow-hidden ${note.isLive ? 'live-note' : ''}`;
+                noteElement.className = 'bg-gray-800 rounded-lg shadow-lg overflow-hidden';
                 noteElement.style.backgroundColor = note.color || '#4A5568';
                 noteElement.innerHTML = `
                     <div class="p-6" style="color: ${getContrastColor(note.color)};">
-                        ${note.isLive ? '<span class="text-red-500 font-bold">مباشر</span>' : ''}
                         <h3 class="text-2xl font-bold mb-3">${note.title}</h3>
                         <div class="mb-4 max-h-48 overflow-y-auto">${note.content}</div>
                         ${note.link ? `<a href="${note.link}" target="_blank" class="text-blue-400 hover:text-blue-300 block mb-2">رابط مرفق</a>` : ''}
@@ -266,20 +238,19 @@
             }
 
             const newNote = {
-                id: editingNoteId !== null ? notes[editingNoteId].id : Date.now(),
                 title,
                 content,
                 link,
                 color,
                 category,
-                createdAt: editingNoteId !== null ? notes[editingNoteId].createdAt : new Date().toISOString(),
+                createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
 
             if (editingNoteId !== null) {
-                notes[editingNoteId] = newNote;
+                notes[editingNoteId] = { ...notes[editingNoteId], ...newNote, updatedAt: new Date().toISOString() };
             } else {
-                notes.unshift(newNote);
+                notes.push(newNote);
             }
 
             localStorage.setItem('notes', JSON.stringify(notes));
@@ -357,7 +328,7 @@
         function searchNotes() {
             const searchTerm = searchInput.value.toLowerCase();
             if (searchTerm === '') {
-                renderNotes();
+                renderNotes(); 
             } else {
                 const filteredNotes = notes.filter(note => 
                     note.title.toLowerCase().includes(searchTerm) || 
@@ -370,10 +341,12 @@
         function filterAndSortNotes() {
             let filteredNotes = [...notes];
             
+            // تطبيق فلتر الفئة
             if (categoryFilter.value) {
                 filteredNotes = filteredNotes.filter(note => note.category === categoryFilter.value);
             }
 
+            // تطبيق الترتيب
             switch (sortFilter.value) {
                 case 'newest':
                     filteredNotes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -389,109 +362,7 @@
             renderNotes(filteredNotes);
         }
 
-        function toggleLive() {
-            isLive = !isLive;
-            liveButton.classList.toggle('active', isLive);
-            if (isLive) {
-                startLiveUpdates();
-            } else {
-                stopLiveUpdates();
-            }
-        }
-
-        function startLiveUpdates() {
-            fetchLiveNotes();
-            liveInterval = setInterval(fetchLiveNotes, 5000);
-        }
-
-        function stopLiveUpdates() {
-            clearInterval(liveInterval);
-        }
-
-    async function fetchLiveNotes() {
-        try {
-            const response = await fetch(liveUrl);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            let responseText = await response.text();
-            console.log("النص الأصلي المستلم:", responseText); 
-
-   
-            responseText = responseText.trim();
-            if (responseText.startsWith(")]}'\n")) {
-                responseText = responseText.substr(5);
-            }
-            console.log("النص بعد التنظيف:", responseText);
-
-            let liveNotes;
-            try {
-                liveNotes = JSON.parse(responseText);
-            } catch (jsonError) {
-                console.error("خطأ في تحليل JSON:", jsonError);
-                throw new Error("فشل في تحليل البيانات كـ JSON");
-            }
-
-            if (!Array.isArray(liveNotes)) {
-                if (typeof liveNotes === 'object' && liveNotes !== null) {
-                    liveNotes = [liveNotes]; 
-                } else {
-                    console.error("البيانات المستلمة:", liveNotes);
-                    throw new Error("البيانات المستلمة ليست بالتنسيق المتوقع");
-                }
-            }
-
-            let hasNewNotes = false;
-            liveNotes.forEach(liveNote => {
-                if (!liveNote.id) {
-                    liveNote.id = Date.now();
-                }
-                if (!liveNote.title || !liveNote.content) {
-                    console.warn("تم تجاهل ملاحظة غير صالحة:", liveNote);
-                    return;
-                }
-                const existingNoteIndex = notes.findIndex(note => note.id === liveNote.id);
-                if (existingNoteIndex === -1) {
-                    notes.unshift({
-                        ...liveNote,
-                        isLive: true,
-                        createdAt: liveNote.createdAt || new Date().toISOString(),
-                        updatedAt: liveNote.updatedAt || new Date().toISOString()
-                    });
-                    hasNewNotes = true;
-                }
-            });
-
-            if (hasNewNotes) {
-                localStorage.setItem('notes', JSON.stringify(notes));
-                renderNotes();
-                console.log("تم إضافة ملاحظات جديدة");
-            } else {
-                console.log("لم يتم العثور على ملاحظات جديدة");
-            }
-        } catch (error) {
-            console.error('Error fetching live notes:', error);
-            alert(`حدث خطأ أثناء جلب الملاحظات المباشرة: ${error.message}\nيرجى التحقق من الرابط والاتصال بالإنترنت والمحاولة مرة أخرى.`);
-            stopLiveUpdates();
-            isLive = false;
-            liveButton.classList.remove('active');
-        }
-    }
-
-        function editLiveUrl() {
-            const newUrl = prompt('أدخل الرابط الجديد للبث المباشر:', liveUrl);
-            if (newUrl && newUrl !== liveUrl) {
-                liveUrl = newUrl;
-                alert('تم تحديث رابط البث المباشر بنجاح');
-                if (isLive) {
-                    stopLiveUpdates();
-                    startLiveUpdates();
-                }
-            }
-        }
-
-
+       
         addNoteBtn.addEventListener('click', () => showModal());
         saveNoteBtn.addEventListener('click', saveNote);
         cancelNoteBtn.addEventListener('click', hideModal);
@@ -500,10 +371,8 @@
         searchInput.addEventListener('input', searchNotes);
         categoryFilter.addEventListener('change', filterAndSortNotes);
         sortFilter.addEventListener('change', filterAndSortNotes);
-        liveButton.addEventListener('click', toggleLive);
-        editLiveUrlBtn.addEventListener('click', editLiveUrl);
 
-       
+        
         renderNotes();
     </script>
 </body>
