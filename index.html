@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title> الملاحظات </title>
+    <title>تطبيق الملاحظات المتقدم</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
@@ -47,19 +47,41 @@
             font-size: 1.1rem;
             padding: 0.5rem 1rem;
         }
+        .live-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .live-button.active {
+            background-color: #e53e3e;
+        }
+        .live-note {
+            border: 2px solid #e53e3e;
+        }
     </style>
 </head>
 <body class="min-h-screen">
     <div class="container mx-auto px-4 py-8">
         <header class="mb-8">
             <h1 class="text-4xl font-bold text-center mb-4">تطبيق الملاحظات المتقدم</h1>
+            <div id="statsContainer" class="bg-gray-700 p-4 rounded-lg mb-4 text-center">
+                <!-- إحصائيات الملاحظات ستضاف هنا -->
+            </div>
             <div class="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0 mb-4">
                 <div class="flex space-x-4 rtl:space-x-reverse w-full md:w-auto">
                     <button id="addNoteBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded header-button">
                         <i class="fas fa-plus mr-2"></i>إضافة ملاحظة
                     </button>
-                    <div class="relative flex-grow md:flex-grow-0">
-                        <input type="text" id="searchInput" placeholder="بحث في الملاحظات..." class="w-full bg-gray-700 text-white py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg">
+                    <div class="relative flex-grow md:flex-grow-0 flex items-center">
+                        <input type="text" id="searchInput" placeholder="بحث في الملاحظات..." class="w-full bg-gray-700 text-white py-2 px-4 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg">
+                        <button id="liveButton" class="live-button bg-gray-700 rounded-r">
+                            <i class="fas fa-broadcast-tower"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="flex space-x-4 rtl:space-x-reverse">
@@ -68,6 +90,12 @@
                     </button>
                     <button id="importNotesBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded header-button">
                         <i class="fas fa-file-import mr-2"></i>استيراد
+                    </button>
+                    <button id="editLiveUrlBtn" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded header-button">
+                        <i class="fas fa-link mr-2"></i>تعديل رابط البث
+                    </button>
+                    <button id="fetchOnceBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded header-button">
+                        <i class="fas fa-download mr-2"></i>جلب مرة واحدة
                     </button>
                 </div>
             </div>
@@ -138,11 +166,19 @@
         const searchInput = document.getElementById('searchInput');
         const categoryFilter = document.getElementById('categoryFilter');
         const sortFilter = document.getElementById('sortFilter');
+        const liveButton = document.getElementById('liveButton');
+        const editLiveUrlBtn = document.getElementById('editLiveUrlBtn');
+        const fetchOnceBtn = document.getElementById('fetchOnceBtn');
+        const statsContainer = document.getElementById('statsContainer');
 
         let editingNoteId = null;
         let quill;
+        let isLive = false;
+        let liveInterval;
+        let liveUrl = localStorage.getItem('liveUrl') || '';
+        let fetchedNoteIds = new Set(JSON.parse(localStorage.getItem('fetchedNoteIds')) || []);
 
-      
+        // Initialize Quill
         document.addEventListener('DOMContentLoaded', function() {
             quill = new Quill('#editor', {
                 theme: 'snow',
@@ -165,16 +201,18 @@
                     ]
                 }
             });
+            updateStats();
         });
 
         function renderNotes(notesToRender = notes) {
             notesContainer.innerHTML = '';
             notesToRender.forEach((note, index) => {
                 const noteElement = document.createElement('div');
-                noteElement.className = 'bg-gray-800 rounded-lg shadow-lg overflow-hidden';
-                noteElement.style.backgroundColor = note.color || '#4A5568';
+                noteElement.className = `bg-gray-800 rounded-lg shadow-lg overflow-hidden ${note.isLive ? 'live-note' : ''}`;
+                noteElement.style.backgroundColor = note.color || '#dedede';
                 noteElement.innerHTML = `
                     <div class="p-6" style="color: ${getContrastColor(note.color)};">
+                        ${note.isLive ? '<span class="text-red-500 font-bold">مباشر</span>' : ''}
                         <h3 class="text-2xl font-bold mb-3">${note.title}</h3>
                         <div class="mb-4 max-h-48 overflow-y-auto">${note.content}</div>
                         ${note.link ? `<a href="${note.link}" target="_blank" class="text-blue-400 hover:text-blue-300 block mb-2">رابط مرفق</a>` : ''}
@@ -190,6 +228,25 @@
                 `;
                 notesContainer.appendChild(noteElement);
             });
+            updateStats();
+        }
+
+function updateStats() {
+            const totalNotes = notes.length;
+            const categoryCounts = notes.reduce((acc, note) => {
+                acc[note.category] = (acc[note.category] || 0) + 1;
+                return acc;
+            }, {});
+            const liveNotes = notes.filter(note => note.isLive).length;
+
+            statsContainer.innerHTML = `
+                <p class="text-lg font-bold">إحصائيات الملاحظات:</p>
+                <p>إجمالي الملاحظات: ${totalNotes}</p>
+                <p>ملاحظات مباشرة: ${liveNotes}</p>
+                ${Object.entries(categoryCounts).map(([category, count]) => 
+                    `<p>${getCategoryName(category)}: ${count}</p>`
+                ).join('')}
+            `;
         }
 
         function getContrastColor(bgColor) {
@@ -238,19 +295,20 @@
             }
 
             const newNote = {
+                id: editingNoteId !== null ? notes[editingNoteId].id : Date.now(),
                 title,
                 content,
                 link,
                 color,
                 category,
-                createdAt: new Date().toISOString(),
+                createdAt: editingNoteId !== null ? notes[editingNoteId].createdAt : new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
 
             if (editingNoteId !== null) {
-                notes[editingNoteId] = { ...notes[editingNoteId], ...newNote, updatedAt: new Date().toISOString() };
+                notes[editingNoteId] = newNote;
             } else {
-                notes.push(newNote);
+                notes.unshift(newNote);
             }
 
             localStorage.setItem('notes', JSON.stringify(notes));
@@ -293,7 +351,18 @@
         }
 
         function exportNotes() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(notes));
+            const notesToExport = notes.map(note => ({
+                id: note.id,
+                title: note.title,
+                content: note.content,
+                link: note.link || "",
+                color: note.color || "#dedede",
+                category: note.category,
+                createdAt: note.createdAt,
+                updatedAt: note.updatedAt,
+                isLive: note.isLive || false
+            }));
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(notesToExport));
             const downloadAnchorNode = document.createElement('a');
             downloadAnchorNode.setAttribute("href", dataStr);
             downloadAnchorNode.setAttribute("download", "notes.json");
@@ -328,7 +397,7 @@
         function searchNotes() {
             const searchTerm = searchInput.value.toLowerCase();
             if (searchTerm === '') {
-                renderNotes(); 
+                renderNotes();
             } else {
                 const filteredNotes = notes.filter(note => 
                     note.title.toLowerCase().includes(searchTerm) || 
@@ -341,12 +410,10 @@
         function filterAndSortNotes() {
             let filteredNotes = [...notes];
             
-            // تطبيق فلتر الفئة
             if (categoryFilter.value) {
                 filteredNotes = filteredNotes.filter(note => note.category === categoryFilter.value);
             }
 
-            // تطبيق الترتيب
             switch (sortFilter.value) {
                 case 'newest':
                     filteredNotes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -362,18 +429,143 @@
             renderNotes(filteredNotes);
         }
 
-       
-        addNoteBtn.addEventListener('click', () => showModal());
-        saveNoteBtn.addEventListener('click', saveNote);
-        cancelNoteBtn.addEventListener('click', hideModal);
-        exportNotesBtn.addEventListener('click', exportNotes);
-        importNotesBtn.addEventListener('click', importNotes);
-        searchInput.addEventListener('input', searchNotes);
-        categoryFilter.addEventListener('change', filterAndSortNotes);
-        sortFilter.addEventListener('change', filterAndSortNotes);
+function areNotesEqual(note1, note2) {
+    return note1.title === note2.title &&
+           note1.content === note2.content &&
+           note1.color === note2.color &&
+           new Date(note1.createdAt).getTime() === new Date(note2.createdAt).getTime();
+}
 
+async function fetchLiveNotes(showNotification = false) {
+    if (!liveUrl) {
+        alert('الرجاء إدخال رابط البث المباشر أولاً');
+        return;
+    }
+
+    try {
+        const response = await fetch(liveUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         
-        renderNotes();
+        let responseText = await response.text();
+        responseText = responseText.trim();
+        if (responseText.startsWith(")]}'\n")) {
+            responseText = responseText.substr(5);
+        }
+
+        let liveNotes;
+        try {
+            liveNotes = JSON.parse(responseText);
+        } catch (jsonError) {
+            console.error("خطأ في تحليل JSON:", jsonError);
+            throw new Error("فشل في تحليل البيانات كـ JSON");
+        }
+
+        if (!Array.isArray(liveNotes)) {
+            if (typeof liveNotes === 'object' && liveNotes !== null) {
+                liveNotes = [liveNotes];
+            } else {
+                console.error("البيانات المستلمة:", liveNotes);
+                throw new Error("البيانات المستلمة ليست بالتنسيق المتوقع");
+            }
+        }
+
+        let newNotesCount = 0;
+        liveNotes.forEach(liveNote => {
+            if (!liveNote.id) {
+                liveNote.id = Date.now() + Math.random().toString(36).substr(2, 9);
+            }
+            if (!liveNote.title || !liveNote.content) {
+                console.warn("تم تجاهل ملاحظة غير صالحة:", liveNote);
+                return;
+            }
+            
+            // التحقق من وجود ملاحظة مطابقة
+            const existingNote = notes.find(note => areNotesEqual(note, liveNote));
+            
+            if (!existingNote && !fetchedNoteIds.has(liveNote.id)) {
+                notes.unshift({
+                    ...liveNote,
+                    isLive: true,
+                    createdAt: liveNote.createdAt || new Date().toISOString(),
+                    updatedAt: liveNote.updatedAt || new Date().toISOString()
+                });
+                fetchedNoteIds.add(liveNote.id);
+                newNotesCount++;
+            }
+        });
+
+        if (newNotesCount > 0) {
+            localStorage.setItem('notes', JSON.stringify(notes));
+            localStorage.setItem('fetchedNoteIds', JSON.stringify([...fetchedNoteIds]));
+            renderNotes();
+            if (showNotification) {
+                alert(`تم إضافة ${newNotesCount} ملاحظة جديدة`);
+            }
+        } else if (showNotification) {
+            alert("لم يتم العثور على ملاحظات جديدة");
+        }
+    } catch (error) {
+        console.error('Error fetching live notes:', error);
+        if (showNotification) {
+            alert(`حدث خطأ أثناء جلب الملاحظات المباشرة: ${error.message}\nيرجى التحقق من الرابط والاتصال بالإنترنت والمحاولة مرة أخرى.`);
+        }
+        stopLiveUpdates();
+        isLive = false;
+        liveButton.classList.remove('active');
+    }
+}
+
+function editLiveUrl() {
+    const newUrl = prompt('أدخل الرابط الجديد للبث المباشر:', liveUrl);
+    if (newUrl !== null) {
+        liveUrl = newUrl.trim();
+        localStorage.setItem('liveUrl', liveUrl);
+        fetchedNoteIds.clear();
+        localStorage.setItem('fetchedNoteIds', JSON.stringify([]));
+        alert('تم تحديث رابط البث المباشر بنجاح');
+        if (isLive) {
+            stopLiveUpdates();
+            startLiveUpdates();
+        }
+    }
+}
+
+function toggleLive() {
+    isLive = !isLive;
+    liveButton.classList.toggle('active', isLive);
+    if (isLive) {
+        startLiveUpdates();
+    } else {
+        stopLiveUpdates();
+    }
+}
+
+function startLiveUpdates() {
+    fetchLiveNotes(false); // Initial fetch without notification
+    liveInterval = setInterval(() => fetchLiveNotes(false), 5000); // Periodic fetch without notification
+}
+
+function stopLiveUpdates() {
+    clearInterval(liveInterval);
+}
+
+// Event Listeners
+addNoteBtn.addEventListener('click', () => showModal());
+saveNoteBtn.addEventListener('click', saveNote);
+cancelNoteBtn.addEventListener('click', hideModal);
+exportNotesBtn.addEventListener('click', exportNotes);
+importNotesBtn.addEventListener('click', importNotes);
+searchInput.addEventListener('input', searchNotes);
+categoryFilter.addEventListener('change', filterAndSortNotes);
+sortFilter.addEventListener('change', filterAndSortNotes);
+liveButton.addEventListener('click', toggleLive);
+editLiveUrlBtn.addEventListener('click', editLiveUrl);
+fetchOnceBtn.addEventListener('click', () => fetchLiveNotes(true)); // Fetch once with notification
+
+// Initial render
+renderNotes();
     </script>
 </body>
 </html>
